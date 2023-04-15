@@ -32,17 +32,17 @@ pub fn calculate_sha1<P: AsRef<Path>>(file_path: P) -> Result<String, std::io::E
 ///
 /// # Arguments
 ///
-/// * `file_path` - A `PathBuf` representing the path to the file to be copied.
-/// * `output_dir` - A `PathBuf` representing the directory to which the file should be copied.
+/// * `from` - A `PathBuf` representing the path to the file to be copied.
+/// * `to` - A `PathBuf` representing the directory to which the file should be copied.
 ///
 /// # Returns
 ///
 /// * `Result<(), std::io::Error>` - A `Result` containing `()` if the file was successfully copied or already exists in the output directory, or an `std::io::Error` if an error occurred while copying the file or creating the necessary directories.
-pub fn copy_file_to_dir<P1:AsRef<Path>, P2: AsRef<Path>>(file_path: P1, output_dir: P2) -> Result<(), std::io::Error> {
-    let hash = calculate_sha1(&file_path)?;
+pub fn copy<P1:AsRef<Path>, P2: AsRef<Path>>(from: P1, to: P2) -> Result<(), std::io::Error> {
+    let hash = calculate_sha1(&from)?;
     let subfolder = &hash[..2];
     let file_name = &hash[2..];
-    let subfolder_path = output_dir.as_ref().join(subfolder);
+    let subfolder_path = to.as_ref().join(subfolder);
     if !subfolder_path.exists() {
         std::fs::create_dir_all(&subfolder_path)?;
     }
@@ -50,7 +50,7 @@ pub fn copy_file_to_dir<P1:AsRef<Path>, P2: AsRef<Path>>(file_path: P1, output_d
     if file_path_in_output_dir.exists() {
         return Ok(());
     }
-    std::fs::copy(file_path, file_path_in_output_dir)?;
+    std::fs::copy(from, file_path_in_output_dir)?;
     Ok(())
 }
 
@@ -81,7 +81,7 @@ mod tests {
         file.write_all(b"hello world").unwrap();
         let output_dir = PathBuf::from(env!("PWD")).join("test_output");
         std::fs::create_dir(&output_dir)?;
-        copy_file_to_dir(&file_path, &output_dir)?;
+        copy(&file_path, &output_dir)?;
         let hash = calculate_sha1(&file_path)?;
         let subfolder = &hash[..2];
         let file_name = &hash[2..];
