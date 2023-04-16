@@ -1,6 +1,6 @@
+use sha1::{Digest, Sha1};
 use std::fs::File;
 use std::io::{BufReader, Read};
-use sha1::{Digest, Sha1};
 use std::path::Path;
 
 /// Calculates the SHA1 hash of a file located at the given file path.
@@ -38,7 +38,7 @@ pub fn calculate_sha1<P: AsRef<Path>>(file_path: P) -> Result<String, std::io::E
 /// # Returns
 ///
 /// * `Result<(), std::io::Error>` - A `Result` containing `()` if the file was successfully copied or already exists in the output directory, or an `std::io::Error` if an error occurred while copying the file or creating the necessary directories.
-pub fn copy<P1:AsRef<Path>, P2: AsRef<Path>>(from: P1, to: P2) -> Result<(), std::io::Error> {
+pub fn copy<P1: AsRef<Path>, P2: AsRef<Path>>(from: P1, to: P2) -> Result<(), std::io::Error> {
     let hash = calculate_sha1(&from)?;
     let subfolder = &hash[..2];
     let file_name = &hash[2..];
@@ -56,9 +56,9 @@ pub fn copy<P1:AsRef<Path>, P2: AsRef<Path>>(from: P1, to: P2) -> Result<(), std
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use std::io::Write;
     use std::path::PathBuf;
-    use super::*;
 
     #[test]
     fn test_calculate_sha1() {
@@ -79,7 +79,7 @@ mod tests {
         let file_path = "test_file2.txt";
         let mut file = File::create(file_path).unwrap();
         file.write_all(b"hello world").unwrap();
-        let output_dir = PathBuf::from(env!("PWD")).join("test_output");
+        let output_dir = PathBuf::from("test_output");
         std::fs::create_dir(&output_dir)?;
         copy(&file_path, &output_dir)?;
         let hash = calculate_sha1(&file_path)?;
@@ -96,4 +96,3 @@ mod tests {
         Ok(())
     }
 }
-

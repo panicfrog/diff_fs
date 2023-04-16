@@ -1,5 +1,5 @@
-mod blob;
-mod tree;
+pub mod blob;
+pub mod tree;
 
 pub fn add(left: usize, right: usize) -> usize {
     left + right
