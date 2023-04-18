@@ -38,24 +38,28 @@ struct Entry {
 }
 
 impl Entry {
-    /// get bytes with  length(2) + type(1) + oid + name
+    /// get bytes with type(1) + length(2) + oid + name
     fn bytes(&self) -> Vec<u8> {
         let oid = self.oid.get_id();
-        let length = 2 + 1 + oid.len()  + self.name.len();
+        let length = 1 + 2 + oid.len() + self.name.len();
         let mut bytes = Vec::with_capacity(length);
-        // 长度2字节
-        bytes.extend(&(length as u16).to_be_bytes());
         // 类型1字节
         match &self.oid {
             EntryId::Blob(_) => bytes.push(0),
             EntryId::Tree(_) => bytes.push(1),
         }
+        // 长度2字节
+        bytes.extend(&(length as u16).to_be_bytes());
         // oid
         bytes.extend(oid.bytes());
         // 文件名
         bytes.extend(self.name.bytes());
         bytes
     }
+}
+
+fn oxstring_to_digest() {
+
 }
 
 #[derive(Debug)]
@@ -127,89 +131,69 @@ where
 
 #[cfg(test)]
 mod tests {
+    use sha1::{Digest, Sha1};
     use std::path::PathBuf;
 
-
-#[test]
-fn test_create_tree() {
-    use super::*;
-    use std::fs::File;
-    use std::io::Write;
-
-    let dir = PathBuf::from("text_data");
-    let subdir1 = dir.join("subdir1");
-    let subdir2 = dir.join("subdir2");
-    let file1 = dir.join("file1.txt");
-    let file2 = subdir1.join("file2.txt");
-    let file3 = subdir2.join("file3.txt");
-
-    std::fs::create_dir_all(&subdir1).unwrap();
-    std::fs::create_dir_all(&subdir2).unwrap();
-
-    let mut f1 = File::create(&file1).unwrap();
-    f1.write_all(b"hello world").unwrap();
-
-    let mut f2 = File::create(&file2).unwrap();
-    f2.write_all(b"goodbye world").unwrap();
-
-    let mut f3 = File::create(&file3).unwrap();
-    f3.write_all(b"foo bar").unwrap();
-
-    // let mut completed_count = 0;
-    let mut completed = |tree: &Tree, sha1: &str| {
-        println!("tree: {:?}, sha1: {}", tree, sha1);
-        // completed_count += 1;
-        // match completed_count {
-        //     1 => {
-        //         assert_eq!(tree.entries.len(), 2);
-        //         assert_eq!(tree.entries[0].name, "file1.txt");
-        //         assert_eq!(tree.entries[1].name, "subdir1");
-        //         assert_eq!(sha1, "d7c8fbbf1e9f3b7c8b4d5c6f5d7d7d7d7d7d7d7d");
-        //     }
-        //     2 => {
-        //         assert_eq!(tree.entries.len(), 1);
-        //         assert_eq!(tree.entries[0].name, "file2.txt");
-        //         assert_eq!(sha1, "d7c8fbbf1e9f3b7c8b4d5c6f5d7d7d7d7d7d7d7d");
-        //     }
-        //     3 => {
-        //         assert_eq!(tree.entries.len(), 1);
-        //         assert_eq!(tree.entries[0].name, "file3.txt");
-        //         assert_eq!(sha1, "d7c8fbbf1e9f3b7c8b4d5c6f5d7d7d7d7d7d7d7d");
-        //     }
-        //     4 => {
-        //         assert_eq!(tree.entries.len(), 2);
-        //         assert_eq!(tree.entries[0].name, "subdir1");
-        //         assert_eq!(tree.entries[1].name, "subdir2");
-        //         assert_eq!(sha1, "d7c8fbbf1e9f3b7c8b4d5c6f5d7d7d7d7d7d7d7d");
-        //     }
-        //     5 => {
-        //         assert_eq!(tree.entries.len(), 1);
-        //         assert_eq!(tree.entries[0].name, "file2.txt");
-        //         assert_eq!(sha1, "d7c8fbbf1e9f3b7c8b4d5c6f5d7d7d7d7d7d7d7d");
-        //     }
-        //     6 => {
-        //         assert_eq!(tree.entries.len(), 1);
-        //         assert_eq!(tree.entries[0].name, "file3.txt");
-        //         assert_eq!(sha1, "d7c8fbbf1e9f3b7c8b4d5c6f5d7d7d7d7d7d7d7d");
-        //     }
-        //     7 => {
-        //         assert_eq!(tree.entries.len(), 3);
-        //         assert_eq!(tree.entries[0].name, "file1.txt");
-        //         assert_eq!(tree.entries[1].name, "subdir1");
-        //         assert_eq!(tree.entries[2].name, "subdir2");
-        //         assert_eq!(sha1, "d7c8fbbf1e9f3b7c8b4d5c6f5d7d7d7d7d7d7d7d");
-        //     }
-        //     _ => panic!("Unexpected call to completed function"),
-        // }
-    };
-
-    let mut tree = create_tree(&dir, &mut completed).unwrap();
-    assert_eq!(tree.entries.len(), 3);
-    // assert_eq!(tree.entries[0].name, "file1.txt");
-    // assert_eq!(tree.entries[1].name, "subdir1");
-    // assert_eq!(tree.entries[2].name, "subdir2");
-    // assert_eq!(tree.calculate_sha1(), "d7c8fbbf1e9f3b7c8b4d5c6f5d7d7d7d7d7d7d7d");
-    std::fs::remove_dir_all(dir).unwrap();
-}
-    
+    #[test]
+    fn test_sha1_bytes() {
+        let val = |c: u8, idx: usize| -> u8 {
+            match c {
+                b'A'..=b'F' => c - b'A' + 10,
+                b'a'..=b'f' => c - b'a' + 10,
+                b'0'..=b'9' => c - b'0',
+                _ => unimplemented!("invalid hex digit at index {}", idx),
+            }
+        };
+        // 计算字符串的sha1值, 再转成16进制, 再转回来
+       let mut hasher = Sha1::new();
+         hasher.update(b"hello world");
+        let hash = hasher.finalize();
+        println!("{:?}", hash);
+        let sha1 = format!("{:x}", hash);
+        let r: Vec<u8> = sha1.as_bytes()
+            .chunks(2)
+            .enumerate()
+            .map(|(i, pair)| val(pair[0], 2 * i) << 4 | val(pair[1], 2 * i + 1))
+            .collect();
+        println!("{:?}", r);
     }
+
+    #[test]
+    fn test_create_tree() {
+        use super::*;
+        use std::fs::File;
+        use std::io::Write;
+
+        let dir = PathBuf::from("text_data");
+        let subdir1 = dir.join("subdir1");
+        let subdir2 = dir.join("subdir2");
+        let file1 = dir.join("file1.txt");
+        let file2 = subdir1.join("file2.txt");
+        let file3 = subdir2.join("file3.txt");
+
+        std::fs::create_dir_all(&subdir1).unwrap();
+        std::fs::create_dir_all(&subdir2).unwrap();
+
+        let mut f1 = File::create(&file1).unwrap();
+        f1.write_all(b"hello world").unwrap();
+
+        let mut f2 = File::create(&file2).unwrap();
+        f2.write_all(b"goodbye world").unwrap();
+
+        let mut f3 = File::create(&file3).unwrap();
+        f3.write_all(b"foo bar").unwrap();
+
+        // let mut completed_count = 0;
+        let mut completed = |tree: &Tree, sha1: &str| {
+            println!("tree: {:?}, sha1: {}", tree, sha1);
+        };
+
+        let mut tree = create_tree(&dir, &mut completed).unwrap();
+        assert_eq!(tree.entries.len(), 3);
+        // assert_eq!(tree.entries[0].name, "file1.txt");
+        // assert_eq!(tree.entries[1].name, "subdir1");
+        // assert_eq!(tree.entries[2].name, "subdir2");
+        // assert_eq!(tree.calculate_sha1(), "d7c8fbbf1e9f3b7c8b4d5c6f5d7d7d7d7d7d7d7d");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+}
