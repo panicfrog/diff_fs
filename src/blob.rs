@@ -46,11 +46,11 @@ pub fn copy<P1: AsRef<Path>, P2: AsRef<Path>>(from: P1, to: P2) -> Result<(), st
     if !subfolder_path.exists() {
         std::fs::create_dir_all(&subfolder_path)?;
     }
-    let file_path_in_output_dir = subfolder_path.join(file_name);
-    if file_path_in_output_dir.exists() {
+    let dst = subfolder_path.join(file_name);
+    if dst.exists() {
         return Ok(());
     }
-    std::fs::copy(from, file_path_in_output_dir)?;
+    std::fs::copy(from, dst)?;
     Ok(())
 }
 

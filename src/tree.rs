@@ -78,8 +78,7 @@ impl Tree {
         });
     }
 
-    pub fn bytes(&mut self) -> Result<Vec<u8>> {
-        self.sort_entries();
+    pub fn bytes(&self) -> Result<Vec<u8>> {
         let mut bytes = Vec::new();
         let entries_length = self.entries.len();
         // 写入entries的长度
@@ -92,6 +91,7 @@ impl Tree {
     }
 
     fn calculate_sha1(&mut self) -> Result<String> {
+        self.sort_entries();
         let mut hasher = Sha1::new();
         hasher.update(&self.bytes()?);
         let hash = hasher.finalize();
@@ -99,11 +99,32 @@ impl Tree {
     }
 }
 
+fn write_tree<P1, P2>(from: P1, to: P2) -> Result<()> where P1: AsRef<Path>, P2: AsRef<Path> {
+    let mut tree = create_tree(from, &mut |t, hash| -> Result<()> {
+        let subfolder = &hash[..2];
+        let file_name = &hash[2..];
+        let subfolder_path = to.as_ref().join(subfolder);
+        if !subfolder_path.exists() {
+            std::fs::create_dir_all(&subfolder_path)?;
+        }
+        let dst = subfolder_path.join(file_name);
+        if dst.exists() {
+            return Ok(());
+        }
+        std::fs::write(dst, t.bytes()?)?;
+        // std::fs::copy(from, dst)?;
+        Ok(())
+    })?;
+    let sha1 = tree.calculate_sha1()?;
+    println!("{}", sha1);
+    Ok(())
+}
+
 /// Creates a `Tree` object from the given path.
 fn create_tree<P, F>(path: P, compeleted: &mut F) -> Result<Tree>
 where
     P: AsRef<Path>,
-    F: FnMut(&Tree, &str),
+    F: FnMut(&Tree, &str) -> Result<()>,
 {
     let mut entries = Vec::new();
     for entry in fs::read_dir(path)? {
@@ -113,7 +134,7 @@ where
         if path.is_dir() {
             let mut tree = create_tree(&path, compeleted)?;
             let sha1 = tree.calculate_sha1()?;
-            compeleted(&tree, &sha1);
+            compeleted(&tree, &sha1)?;
             let oid = EntryId::Tree(sha1);
             entries.push(Entry { name, oid });
         } else {
@@ -123,7 +144,7 @@ where
     }
     let mut result = Tree { entries };
     let sha1 = result.calculate_sha1()?;
-    compeleted(&result, &sha1);
+    compeleted(&result, &sha1)?;
     Ok(result)
 }
 
@@ -193,8 +214,9 @@ mod tests {
         f3.write_all(b"foo bar").unwrap();
 
         // let mut completed_count = 0;
-        let mut completed = |tree: &Tree, sha1: &str| {
+        let mut completed = |tree: &Tree, sha1: &str| -> Result<()> {
             println!("tree: {:?}, sha1: {}", tree, sha1);
+            Ok(())  
         };
 
         let tree = create_tree(&dir, &mut completed).unwrap();
