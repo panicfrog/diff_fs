@@ -2,6 +2,8 @@ use crate::blob;
 use sha1::{Digest, Sha1};
 use std::fs;
 use std::path::Path;
+use anyhow::Result;
+use thiserror::Error;
 
 #[derive(Debug)]
 enum EntryId {
@@ -38,8 +40,8 @@ struct Entry {
 }
 
 impl Entry {
-    /// get bytes with type(1) + length(2) + oid + name
-    fn bytes(&self) -> Vec<u8> {
+    /// get bytes with type(1) + length(2) + oid(20) + name
+    fn bytes(&self) -> Result<Vec<u8>> {
         let oid = self.oid.get_id();
         let length = 1 + 2 + oid.len() + self.name.len();
         let mut bytes = Vec::with_capacity(length);
@@ -51,15 +53,11 @@ impl Entry {
         // 长度2字节
         bytes.extend(&(length as u16).to_be_bytes());
         // oid
-        bytes.extend(oid.bytes());
+        bytes.extend(hex_to_bytes(oid)?);
         // 文件名
         bytes.extend(self.name.bytes());
-        bytes
+        Ok(bytes)
     }
-}
-
-fn oxstring_to_digest() {
-
 }
 
 #[derive(Debug)]
@@ -80,7 +78,7 @@ impl Tree {
         });
     }
 
-    pub fn bytes(&mut self) -> Vec<u8> {
+    pub fn bytes(&mut self) -> Result<Vec<u8>> {
         self.sort_entries();
         let mut bytes = Vec::new();
         let entries_length = self.entries.len();
@@ -88,21 +86,21 @@ impl Tree {
         bytes.extend(&(entries_length as u16).to_be_bytes());
         // 写入entries
         for entry in &self.entries {
-            bytes.extend(entry.bytes());
+            bytes.extend(entry.bytes()?);
         }
-        bytes
+        Ok(bytes)
     }
 
-    fn calculate_sha1(&mut self) -> String {
+    fn calculate_sha1(&mut self) -> Result<String> {
         let mut hasher = Sha1::new();
-        hasher.update(&self.bytes());
+        hasher.update(&self.bytes()?);
         let hash = hasher.finalize();
-        format!("{:x}", hash)
+        Ok(format!("{:x}", hash))
     }
 }
 
 /// Creates a `Tree` object from the given path.
-fn create_tree<P, F>(path: P, compeleted: &mut F) -> Result<Tree, std::io::Error>
+fn create_tree<P, F>(path: P, compeleted: &mut F) -> Result<Tree>
 where
     P: AsRef<Path>,
     F: FnMut(&Tree, &str),
@@ -114,7 +112,7 @@ where
         let path = entry.path();
         if path.is_dir() {
             let mut tree = create_tree(&path, compeleted)?;
-            let sha1 = tree.calculate_sha1();
+            let sha1 = tree.calculate_sha1()?;
             compeleted(&tree, &sha1);
             let oid = EntryId::Tree(sha1);
             entries.push(Entry { name, oid });
@@ -124,37 +122,48 @@ where
         }
     }
     let mut result = Tree { entries };
-    let sha1 = result.calculate_sha1();
+    let sha1 = result.calculate_sha1()?;
     compeleted(&result, &sha1);
     Ok(result)
+}
+
+#[derive(Error, Debug)]
+pub enum HexError {
+    #[error("Invalid hex digit at: {0}")]
+    InvalidHexDigit(usize),
+}
+
+pub fn hex_to_bytes(hex: &str) -> Result<Vec<u8>> {
+    let convert = |c: u8, idx: usize| -> Result<u8> {
+        match c {
+            b'A'..=b'F' => Ok(c - b'A' + 10),
+            b'a'..=b'f' => Ok(c - b'a' + 10),
+            b'0'..=b'9' => Ok(c - b'0'),
+            _ => return Err(HexError::InvalidHexDigit(idx).into()),
+        }
+    };
+    hex.as_bytes()
+        .chunks(2)
+        .enumerate()
+        .map(|(i, pair)| Ok(convert(pair[0], 2 * i)? << 4 | convert(pair[1], 2 * i + 1)?))
+        .collect()
 }
 
 #[cfg(test)]
 mod tests {
     use sha1::{Digest, Sha1};
     use std::path::PathBuf;
+    use super::*;
 
     #[test]
     fn test_sha1_bytes() {
-        let val = |c: u8, idx: usize| -> u8 {
-            match c {
-                b'A'..=b'F' => c - b'A' + 10,
-                b'a'..=b'f' => c - b'a' + 10,
-                b'0'..=b'9' => c - b'0',
-                _ => unimplemented!("invalid hex digit at index {}", idx),
-            }
-        };
         // 计算字符串的sha1值, 再转成16进制, 再转回来
        let mut hasher = Sha1::new();
          hasher.update(b"hello world");
         let hash = hasher.finalize();
         println!("{:?}", hash);
         let sha1 = format!("{:x}", hash);
-        let r: Vec<u8> = sha1.as_bytes()
-            .chunks(2)
-            .enumerate()
-            .map(|(i, pair)| val(pair[0], 2 * i) << 4 | val(pair[1], 2 * i + 1))
-            .collect();
+        let r = hex_to_bytes(&sha1).unwrap();
         println!("{:?}", r);
     }
 
@@ -188,12 +197,8 @@ mod tests {
             println!("tree: {:?}, sha1: {}", tree, sha1);
         };
 
-        let mut tree = create_tree(&dir, &mut completed).unwrap();
+        let tree = create_tree(&dir, &mut completed).unwrap();
         assert_eq!(tree.entries.len(), 3);
-        // assert_eq!(tree.entries[0].name, "file1.txt");
-        // assert_eq!(tree.entries[1].name, "subdir1");
-        // assert_eq!(tree.entries[2].name, "subdir2");
-        // assert_eq!(tree.calculate_sha1(), "d7c8fbbf1e9f3b7c8b4d5c6f5d7d7d7d7d7d7d7d");
         std::fs::remove_dir_all(dir).unwrap();
     }
 }
