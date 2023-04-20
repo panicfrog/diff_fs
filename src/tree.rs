@@ -99,7 +99,7 @@ impl Tree {
     }
 }
 
-fn write_tree<P1, P2>(from: P1, to: P2) -> Result<()> where P1: AsRef<Path>, P2: AsRef<Path> {
+fn write_tree_blob<P1, P2>(from: P1, to: P2) -> Result<()> where P1: AsRef<Path>, P2: AsRef<Path> {
     let mut tree = create_tree(from, &mut |t, hash| -> Result<()> {
         let subfolder = &hash[..2];
         let file_name = &hash[2..];
@@ -173,7 +173,7 @@ pub fn hex_to_bytes(hex: &str) -> Result<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use sha1::{Digest, Sha1};
-    use std::path::PathBuf;
+    use std::{path::PathBuf, fs::File, io::{Write, Read}};
     use super::*;
 
     #[test]
@@ -191,8 +191,9 @@ mod tests {
     #[test]
     fn test_create_tree() {
         use super::*;
-        use std::fs::File;
-        use std::io::Write;
+        use std::fs::{self, File};
+        use std::io::{Write, Read};
+        use std::path::{Path, PathBuf};
 
         let dir = PathBuf::from("text_data");
         let subdir1 = dir.join("subdir1");
@@ -223,4 +224,33 @@ mod tests {
         assert_eq!(tree.entries.len(), 3);
         std::fs::remove_dir_all(dir).unwrap();
     }
+
+    #[test]
+    fn test_write_tree() {
+        let dir = PathBuf::from("test_data");
+        let subdir1 = dir.join("subdir1");
+        let subdir2 = dir.join("subdir2");
+        let file1 = dir.join("file1.txt");
+        let file2 = subdir1.join("file2.txt");
+        let file3 = subdir2.join("file3.txt");
+
+        fs::create_dir_all(&subdir1).unwrap();
+        fs::create_dir_all(&subdir2).unwrap();
+
+        let mut f1 = File::create(&file1).unwrap();
+        f1.write_all(b"hello world").unwrap();
+
+        let mut f2 = File::create(&file2).unwrap();
+        f2.write_all(b"goodbye world").unwrap();
+
+        let mut f3 = File::create(&file3).unwrap();
+        f3.write_all(b"foo bar").unwrap();
+
+        let to = PathBuf::from("test_data_to");
+        write_tree_blob(&dir, &to).unwrap();
+
+        fs::remove_dir_all(dir).unwrap();
+        fs::remove_dir_all(to).unwrap();
+    }
 }
+

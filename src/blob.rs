@@ -38,7 +38,7 @@ pub fn calculate_sha1<P: AsRef<Path>>(file_path: P) -> Result<String, std::io::E
 /// # Returns
 ///
 /// * `Result<(), std::io::Error>` - A `Result` containing `()` if the file was successfully copied or already exists in the output directory, or an `std::io::Error` if an error occurred while copying the file or creating the necessary directories.
-pub fn copy<P1: AsRef<Path>, P2: AsRef<Path>>(from: P1, to: P2) -> Result<(), std::io::Error> {
+pub fn write_file_blob<P1: AsRef<Path>, P2: AsRef<Path>>(from: P1, to: P2) -> Result<(), std::io::Error> {
     let hash = calculate_sha1(&from)?;
     let subfolder = &hash[..2];
     let file_name = &hash[2..];
@@ -81,7 +81,7 @@ mod tests {
         file.write_all(b"hello world").unwrap();
         let output_dir = PathBuf::from("test_output");
         std::fs::create_dir(&output_dir)?;
-        copy(&file_path, &output_dir)?;
+        write_file_blob(&file_path, &output_dir)?;
         let hash = calculate_sha1(&file_path)?;
         let subfolder = &hash[..2];
         let file_name = &hash[2..];
